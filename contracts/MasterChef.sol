@@ -4,13 +4,11 @@ pragma solidity ^0.8.0;
 
 import "./interfaces/IBEP20.sol";
 import "./libraries/SafeMath.sol";
-import "./libraries/SignedSafeMath.sol";
 import "./libraries/SafeBEP20.sol";
 import "./CDzToken.sol";
 import "./CDzBar.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "hardhat/console.sol";
 
 // import "@nomiclabs/buidler/console.sol";
 interface IMigratorChef {
@@ -35,7 +33,6 @@ interface IMigratorChef {
 // Have fun reading it. Hopefully it's bug-free. God bless.
 contract MasterChef is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
-    using SignedSafeMath for int256;
     using SafeBEP20 for IBEP20;
 
     // @notice Info of each user.
@@ -96,6 +93,9 @@ contract MasterChef is Ownable, ReentrancyGuard {
     event LogPoolAddition(uint256 indexed pid, uint256 allocPoint, BEP20 lpToken);
     event LogSetPool(uint256 indexed pid, uint256 allocPoint, bool overwrite);
     event LogUpdatePool(uint256 indexed pid, uint256 lastRewardBlock, uint256 lpSupply, uint256 accCDZPerShare);
+    event SetMaxMint(uint256 _cdzMaxMint);
+    event SetFeeAddr(address _addr);
+    event SetFeeBlockLimit(uint256 _limit);
 
     constructor(
         CDzToken _cdz,
@@ -103,6 +103,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 _startBlock,
         uint256 _cdzMaxMint
     ) {
+        require(address(_cdz) != address(0), "the _cdz address is zero");
         cdz = _cdz;
         cdzPerBlock = _cdzPerBlock;
         startBlock = _startBlock;
@@ -252,7 +253,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         updatePool(_pid);
         uint256 pending = user.amount.mul(pool.accCDZPerShare).div(1e12).sub(user.rewardDebt);
         if (block.number.sub(user.lastDepositBlock) <= feeBlockLimit && feeAddr != address(0))  {
-            uint256 fee = pending.mul(2).div(100);
+            uint256 fee = pending.div(50);
             pending = pending.sub(fee);
             if (fee > 0) {
                 safeCDZTransfer(feeAddr, fee);
@@ -285,16 +286,19 @@ contract MasterChef is Ownable, ReentrancyGuard {
     function setMaxMint(uint256 _cdzMaxMint) public onlyOwner {
         require(_cdzMaxMint > cdzTotalMinted, "setMaxMint: the new max mint must be greater than current minted");
         cdzMaxMint = _cdzMaxMint;
+        emit SetMaxMint(_cdzMaxMint);
     }
 
     // @notice Set the withdraw fee address
     function setFeeAddr(address _addr) public onlyOwner {
         feeAddr = _addr;
+        emit SetFeeAddr(_addr);
     }
 
     // @notice Set the withdraw fee block limit
     function setFeeBlockLimit(uint256 _limit) public onlyOwner {
         feeBlockLimit = _limit;
+        emit SetFeeBlockLimit(_limit);
     }
 
     /**
